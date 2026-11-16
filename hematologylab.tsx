@@ -1,0 +1,770 @@
+import React, { useState, useEffect } from 'react';
+import { Microscope, Droplet, TestTube, CheckCircle, XCircle, Info, Sun, Moon, Activity, ShieldAlert, HeartPulse, ArrowRight, Play, Database, Stethoscope, ClipboardList, FileText, AlertCircle } from 'lucide-react';
+
+// --- Scientific Data & Logic ---
+
+const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+const COMPATIBILITY = {
+  'A+': ['A+', 'A-', 'O+', 'O-'],
+  'A-': ['A-', 'O-'],
+  'B+': ['B+', 'B-', 'O+', 'O-'],
+  'B-': ['B-', 'O-'],
+  'AB+': ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+  'AB-': ['AB-', 'A-', 'B-', 'O-'],
+  'O+': ['O+', 'O-'],
+  'O-': ['O-']
+};
+
+const GAME_MODES = {
+  1: { id: 1, title: 'المستوى الأول: فحص فصائل الدم (Blood Typing)', target: 5 },
+  2: { id: 2, title: 'المستوى الثاني: توافق نقل الدم (Blood Transfusion)', target: 10 },
+  3: { id: 3, title: 'المستوى الثالث: تشخيص الأمراض (Disease Diagnosis)', target: 10 }
+};
+
+const DISEASES = [
+  {
+    id: 'ida', nameAr: 'أنيميا نقص الحديد', nameEn: 'Iron Deficiency Anemia',
+    cbc: { wbc: 'Normal', rbc: 'Low', hgb: 'Low (8.2 g/dL)', plt: 'Normal / High', mcv: 'Low (65 fL)' },
+    smear: 'Microcytic hypochromic red blood cells. Pencil cells visible.',
+    extraTest: 'Low Ferritin, High TIBC.',
+    explanation: 'تتميز أنيميا نقص الحديد بنقص في حجم كريات الدم الحمراء (Microcytic) ونقص في صبغة الهيموجلوبين (Hypochromic). الفيريتين المنخفض هو المؤشر الأدق للتشخيص.'
+  },
+  {
+    id: 'sca', nameAr: 'فقر الدم المنجلي', nameEn: 'Sickle Cell Anemia',
+    cbc: { wbc: 'High', rbc: 'Low', hgb: 'Low (7.5 g/dL)', plt: 'High', mcv: 'Normal (85 fL)' },
+    smear: 'Presence of sickle-shaped cells (Drepanocytes), target cells, and Howell-Jolly bodies.',
+    extraTest: 'Hemoglobin electrophoresis shows HbS.',
+    explanation: 'مرض وراثي يؤدي إلى طفرة في الهيموجلوبين (HbS)، مما يغير شكل الكريات إلى المنجلي عند نقص الأكسجين، مسبباً انسداد الأوعية الدموية (Vaso-occlusion).'
+  },
+  {
+    id: 'thal', nameAr: 'الثلاسيميا', nameEn: 'Thalassemia',
+    cbc: { wbc: 'Normal', rbc: 'High (6.1 M/µL)', hgb: 'Low (9.0 g/dL)', plt: 'Normal', mcv: 'Very Low (55 fL)' },
+    smear: 'Severe microcytosis, prominent Target cells (Codocytes), basophilic stippling.',
+    extraTest: 'Normal or High Ferritin.',
+    explanation: 'خلل جيني في إنتاج سلاسل الجلوبين. يتميز بارتفاع عدد الكريات الحمراء (RBC) رغم وجود فقر دم، مع خلايا هدفية (Target cells) وحجم صغير جداً للكريات.'
+  },
+  {
+    id: 'mega', nameAr: 'أنيميا تضخم الأرومات', nameEn: 'Megaloblastic Anemia',
+    cbc: { wbc: 'Low', rbc: 'Low', hgb: 'Low (8.5 g/dL)', plt: 'Low', mcv: 'High (115 fL)' },
+    smear: 'Macrocytic ovalocytes, hypersegmented neutrophils (>5 lobes).',
+    extraTest: 'Low Vitamin B12 or Low Folate.',
+    explanation: 'ينتج عن نقص فيتامين B12 أو حمض الفوليك، مما يعيق انقسام الحمض النووي (DNA). يظهر ككريات حمراء كبيرة (Macrocytic) وعدلات مفرطة التفصص.'
+  },
+  {
+    id: 'all', nameAr: 'ابيضاض الدم الليمفاوي الحاد', nameEn: 'Acute Lymphoblastic Leukemia (ALL)',
+    cbc: { wbc: 'Very High (85,000 /µL)', rbc: 'Low', hgb: 'Low (7.0 g/dL)', plt: 'Very Low (30,000 /µL)', mcv: 'Normal' },
+    smear: 'Predominance of Lymphoblasts (immature cells with large nuclei and scant cytoplasm).',
+    extraTest: 'Bone marrow biopsy >20% blasts.',
+    explanation: 'سرطان دم حاد شائع عند الأطفال. يتميز بانتشار سريع للخلايا الليمفاوية غير الناضجة (Lymphoblasts) التي تهاجم نخاع العظم وتثبط إنتاج باقي الخلايا.'
+  },
+  {
+    id: 'cml', nameAr: 'ابيضاض الدم النقوي المزمن', nameEn: 'Chronic Myeloid Leukemia (CML)',
+    cbc: { wbc: 'Extremely High (150,000 /µL)', rbc: 'Normal / Low', hgb: 'Normal / Low', plt: 'High or Normal', mcv: 'Normal' },
+    smear: 'Full spectrum of myeloid cells (myelocytes, metamyelocytes, bands, segmented neutrophils).',
+    extraTest: 'Positive Philadelphia Chromosome (t(9;22)).',
+    explanation: 'سرطان دم مزمن يتميز بزيادة هائلة في خلايا الدم البيضاء المحببة بجميع مراحل نموها. وجود كروموسوم فيلادلفيا هو السمة التشخيصية.'
+  },
+  {
+    id: 'hemoA', nameAr: 'الهيموفيليا أ', nameEn: 'Hemophilia A',
+    cbc: { wbc: 'Normal', rbc: 'Normal', hgb: 'Normal', plt: 'Normal', mcv: 'Normal' },
+    smear: 'Normal peripheral blood smear.',
+    extraTest: 'Prolonged aPTT, Normal PT, Low Factor VIII.',
+    explanation: 'مرض نزفي وراثي ناتج عن نقص عامل التخثر الثامن (Factor VIII). يتميز بأن تحليل الـ CBC طبيعي تماماً، لكن فحص التخثر aPTT يكون مرتفعاً.'
+  },
+  {
+    id: 'malaria', nameAr: 'الملاريا', nameEn: 'Malaria',
+    cbc: { wbc: 'Normal / Low', rbc: 'Low', hgb: 'Low (8.0 g/dL)', plt: 'Low (90,000 /µL)', mcv: 'Normal' },
+    smear: 'Plasmodium ring forms (Trophozoites) inside Red Blood Cells.',
+    extraTest: 'Positive rapid diagnostic test for Plasmodium falciparum.',
+    explanation: 'عدوى طفيلية تدمر كريات الدم الحمراء مسببة فقر دم انحلالي (Hemolytic) ونقص في الصفائح الدموية. رؤية الطفيل داخل الكريات تؤكد التشخيص.'
+  },
+  {
+    id: 'itp', nameAr: 'نقص الصفائح المناعي', nameEn: 'Immune Thrombocytopenia (ITP)',
+    cbc: { wbc: 'Normal', rbc: 'Normal', hgb: 'Normal', plt: 'Very Low (15,000 /µL)', mcv: 'Normal' },
+    smear: 'Large platelets (Megathrombocytes), otherwise normal.',
+    extraTest: 'Anti-platelet antibodies present. Normal coagulation profile.',
+    explanation: 'اضطراب مناعي يقوم فيه الجسم بتدمير الصفائح الدموية الخاصة به. يتميز بنقص معزول في الصفائح (Isolated thrombocytopenia) مع بقاء باقي التحاليل طبيعية.'
+  },
+  {
+    id: 'pvera', nameAr: 'كثرة الحمر الحقيقية', nameEn: 'Polycythemia Vera',
+    cbc: { wbc: 'High', rbc: 'Extremely High (7.5 M/µL)', hgb: 'High (19.5 g/dL)', plt: 'High', mcv: 'Normal or Low' },
+    smear: 'Crowded red blood cells, increased all three cell lines (Panmyelosis).',
+    extraTest: 'JAK2 V617F mutation positive. Low Erythropoietin (EPO).',
+    explanation: 'سرطان في نخاع العظم يؤدي إلى إنتاج مفرط لكافة خلايا الدم (خاصة الحمراء). يؤدي ذلك إلى لزوجة عالية في الدم وزيادة خطر التجلط.'
+  }
+];
+
+// Realistic Clumping pattern generator
+const generateClumps = (count) => {
+  return Array.from({ length: count }).map(() => ({
+    x: 10 + Math.random() * 80,
+    y: 10 + Math.random() * 80,
+    r: 2 + Math.random() * 4,
+    delay: Math.random() * 0.5
+  }));
+};
+const CLUMP_COORDS = generateClumps(30);
+
+// --- Components ---
+
+const GlassPanel = ({ children, className = '' }) => (
+  <div className={`bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-white/40 dark:border-slate-700/50 shadow-2xl rounded-3xl ${className}`}>
+    {children}
+  </div>
+);
+
+const BloodDrop = ({ label, state, active, onApply, reagentColor, disabled }) => {
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div 
+        onClick={() => !disabled && active && onApply()}
+        className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full relative overflow-hidden transition-all duration-700 shadow-[0_0_15px_rgba(0,0,0,0.2)] border-4 
+          ${state === 'untested' ? 'bg-red-900/30 border-gray-400/50 dark:border-gray-600/50' : 'bg-red-700 border-red-900 shadow-[0_0_30px_rgba(220,38,38,0.5)]'}
+          ${active && state === 'untested' && !disabled ? 'cursor-pointer scale-105 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.6)] animate-pulse' : ''}
+          ${state !== 'untested' ? 'scale-105' : ''}
+        `}
+      >
+        {/* Liquid Base */}
+        <div className={`absolute inset-0 transition-opacity duration-1000 ${state !== 'untested' ? 'opacity-100' : 'opacity-0'}`}>
+          <div className="w-full h-full bg-[radial-gradient(circle_at_30%_30%,_#ef4444,_#7f1d1d)]"></div>
+          {/* Reagent tint overlay */}
+          <div className="absolute inset-0 mix-blend-color opacity-30" style={{ backgroundColor: reagentColor }}></div>
+          {/* Shine effect */}
+          <div className="absolute top-2 left-4 w-12 h-6 bg-white/30 rounded-full rotate-[-45deg] blur-[2px]"></div>
+          
+          {/* Agglutination (Clumping) Effect */}
+          {state === 'clumped' && (
+            <svg className="absolute inset-0 w-full h-full opacity-90 drop-shadow-lg" viewBox="0 0 100 100">
+              {CLUMP_COORDS.map((c, i) => (
+                <circle 
+                  key={i} 
+                  cx={c.x} 
+                  cy={c.y} 
+                  r={c.r} 
+                  fill="#450a0a" 
+                  className="animate-clump"
+                  style={{ animationDelay: `${c.delay}s` }}
+                />
+              ))}
+            </svg>
+          )}
+        </div>
+      </div>
+      <div className="text-center">
+        <span className="font-bold text-lg dark:text-gray-200 block text-slate-800">{label}</span>
+        <span className={`text-sm font-semibold h-5 block ${state === 'clumped' ? 'text-red-500' : state === 'smooth' ? 'text-green-500' : 'text-slate-500'}`}>
+          {state === 'clumped' ? 'Agglutination (+)' : state === 'smooth' ? 'Negative (-)' : 'Pending Reagent'}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const BloodBag = ({ type, selected, onClick, disabled }) => (
+  <button 
+    onClick={onClick}
+    disabled={disabled}
+    className={`relative w-20 h-28 sm:w-24 sm:h-32 transition-transform duration-300 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:scale-105'} ${selected ? 'scale-110' : ''}`}
+  >
+    {/* Bag Vector */}
+    <svg viewBox="0 0 100 140" className="w-full h-full drop-shadow-xl">
+      <path d="M 20 10 Q 50 -10 80 10 L 90 120 Q 50 150 10 120 Z" fill={selected ? "#b91c1c" : "#ef4444"} stroke="#7f1d1d" strokeWidth="3"/>
+      <path d="M 30 5 L 30 -5 M 70 5 L 70 -5" stroke="#475569" strokeWidth="4" />
+      <rect x="25" y="30" width="50" height="60" fill="#f8fafc" rx="5" />
+      <text x="50" y="70" textAnchor="middle" fill="#0f172a" fontSize="28" fontWeight="bold" fontFamily="sans-serif">{type}</text>
+    </svg>
+    {selected && (
+      <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full p-1 shadow-lg z-10">
+        <CheckCircle size={16} />
+      </div>
+    )}
+  </button>
+);
+
+// --- Main Application ---
+
+export default function App() {
+  const [theme, setTheme] = useState('dark');
+  const [view, setView] = useState('menu'); // menu, tutorial, game
+  
+  // Game State
+  const [level, setLevel] = useState(1);
+  const [score, setScore] = useState(0);
+  const [feedback, setFeedback] = useState({ show: false, correct: false, msg: '' });
+
+  // Level 1: Typing State
+  const [targetType, setTargetType] = useState('');
+  const [drops, setDrops] = useState({ A: 'untested', B: 'untested', D: 'untested' });
+  const [activeReagent, setActiveReagent] = useState(null);
+  const [userGuess, setUserGuess] = useState({ abo: '', rh: '' });
+
+  // Level 2: Transfusion State
+  const [patientType, setPatientType] = useState('');
+  const [selectedDonors, setSelectedDonors] = useState([]);
+
+  // Level 3: Diagnosis State
+  const [currentDisease, setCurrentDisease] = useState(null);
+  const [diagnosisOptions, setDiagnosisOptions] = useState([]);
+  const [showExplanation, setShowExplanation] = useState(false);
+
+  // --- Theme ---
+  useEffect(() => {
+    if (theme === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+
+  // --- Game Logic ---
+  const startLevel = (lvl, preserveScore = false) => {
+    setLevel(lvl);
+    if (!preserveScore) setScore(0);
+    setFeedback({ show: false, correct: false, msg: '' });
+    setShowExplanation(false);
+    
+    if (lvl === 1) {
+      setTargetType(BLOOD_TYPES[Math.floor(Math.random() * BLOOD_TYPES.length)]);
+      setDrops({ A: 'untested', B: 'untested', D: 'untested' });
+      setActiveReagent(null);
+      setUserGuess({ abo: '', rh: '' });
+    } else if (lvl === 2) {
+      setPatientType(BLOOD_TYPES[Math.floor(Math.random() * BLOOD_TYPES.length)]);
+      setSelectedDonors([]);
+    } else if (lvl === 3) {
+      generateDiagnosisCase();
+    }
+    setView('game');
+  };
+
+  const handleNext = () => {
+    if (feedback.correct) {
+      const nextScore = score + 1;
+      setScore(nextScore);
+      if (nextScore === GAME_MODES[level].target && level < 3) {
+        startLevel(level + 1, true); // Go to next level, keep score
+        return;
+      }
+    }
+    startLevel(level, true); // Reload current level
+  };
+
+  // Level 3 Functions
+  const generateDiagnosisCase = () => {
+    const randomDisease = DISEASES[Math.floor(Math.random() * DISEASES.length)];
+    setCurrentDisease(randomDisease);
+    
+    // Generate 3 random incorrect options
+    const incorrectOptions = DISEASES.filter(d => d.id !== randomDisease.id)
+                                     .sort(() => 0.5 - Math.random())
+                                     .slice(0, 3);
+    
+    // Combine and shuffle
+    const options = [randomDisease, ...incorrectOptions].sort(() => 0.5 - Math.random());
+    setDiagnosisOptions(options);
+  };
+
+  const submitDiagnosisGuess = (selectedDiseaseId) => {
+    if (selectedDiseaseId === currentDisease.id) {
+      setFeedback({ show: true, correct: true, msg: 'تشخيص صحيح! (Correct Diagnosis)' });
+    } else {
+      setFeedback({ show: true, correct: false, msg: 'تشخيص خاطئ! (Incorrect Diagnosis)' });
+    }
+    setShowExplanation(true);
+  };
+
+  // Level 1 Functions
+  const applyReagent = (type) => {
+    if (activeReagent !== type) return;
+    const hasA = targetType.includes('A');
+    const hasB = targetType.includes('B');
+    const hasRh = targetType.includes('+');
+
+    let clump = false;
+    if (type === 'A' && hasA) clump = true;
+    if (type === 'B' && hasB) clump = true;
+    if (type === 'D' && hasRh) clump = true;
+
+    setDrops(p => ({ ...p, [type]: clump ? 'clumped' : 'smooth' }));
+    setActiveReagent(null);
+  };
+
+  const submitTypingGuess = () => {
+    if (!userGuess.abo || !userGuess.rh) {
+       alert("يرجى اختيار الفصيلة والعامل الريسوسي أولاً");
+       return;
+    }
+    const fullGuess = userGuess.abo + userGuess.rh;
+    if (fullGuess === targetType) {
+      setFeedback({ show: true, correct: true, msg: 'Diagnosis Correct! التشخيص صحيح' });
+    } else {
+      setFeedback({ show: true, correct: false, msg: `Diagnosis Incorrect! الصحيح هو ${targetType}` });
+    }
+  };
+
+  // Level 2 Functions
+  const toggleDonor = (type) => {
+    setSelectedDonors(prev => 
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
+  };
+
+  const submitTransfusionGuess = () => {
+    if (selectedDonors.length === 0) return alert("اختر متبرعاً واحداً على الأقل");
+    
+    const validDonors = COMPATIBILITY[patientType];
+    const isPerfectMatch = selectedDonors.length === validDonors.length && 
+                           selectedDonors.every(d => validDonors.includes(d));
+    
+    // Check if they selected ANY incompatible blood
+    const hasFatalError = selectedDonors.some(d => !validDonors.includes(d));
+
+    if (hasFatalError) {
+      setFeedback({ show: true, correct: false, msg: 'Fatal Reaction! اخترت فصيلة غير متوافقة' });
+    } else if (isPerfectMatch) {
+      setFeedback({ show: true, correct: true, msg: 'Transfusion Successful! تم اختيار كل المتبرعين المتوافقين' });
+    } else {
+      setFeedback({ show: true, correct: false, msg: 'Incomplete! هناك متبرعين آخرين متوافقين لم تخترهم' });
+    }
+  };
+
+
+  // --- Renderers ---
+  const renderMenu = () => (
+    <div className="flex flex-col items-center justify-center min-h-[85vh] animate-fade-in relative z-10 text-slate-800 dark:text-slate-100">
+      <div className="absolute inset-0 flex items-center justify-center -z-10 opacity-20 dark:opacity-40 blur-3xl pointer-events-none">
+        <div className="w-96 h-96 bg-red-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+        <div className="w-96 h-96 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+      </div>
+
+      <GlassPanel className="p-12 text-center max-w-2xl w-full">
+        <Activity size={80} className="mx-auto text-red-500 mb-6 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+        <h1 className="text-4xl md:text-5xl font-black mb-4 bg-gradient-to-r from-red-600 to-cyan-600 bg-clip-text text-transparent">
+          VIRTUAL HEMATOLOGY LAB
+        </h1>
+        <h2 className="text-2xl font-bold text-slate-600 dark:text-slate-300 mb-8">مختبر علم الدم الافتراضي</h2>
+        
+        <div className="flex flex-col sm:flex-row justify-center gap-4">
+          <button 
+            onClick={() => startLevel(1)}
+            className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl font-bold text-xl shadow-lg hover:shadow-red-500/50 hover:scale-105 transition-all"
+          >
+            <Play size={24} fill="currentColor" /> المستوى الأول (فصائل الدم)
+          </button>
+          <button 
+            onClick={() => startLevel(2)}
+            className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-700 text-white rounded-xl font-bold text-xl shadow-lg hover:shadow-cyan-500/50 hover:scale-105 transition-all"
+          >
+            <HeartPulse size={24} /> المستوى الثاني (نقل الدم)
+          </button>
+          <button 
+            onClick={() => startLevel(3)}
+            className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-700 text-white rounded-xl font-bold text-xl shadow-lg hover:shadow-purple-500/50 hover:scale-105 transition-all"
+          >
+            <Stethoscope size={24} /> المستوى الثالث (التشخيص)
+          </button>
+        </div>
+        <div className="mt-6">
+          <button 
+            onClick={() => setView('tutorial')}
+            className="flex items-center justify-center gap-2 px-8 py-3 mx-auto bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-white rounded-xl font-bold shadow-lg hover:bg-slate-300 dark:hover:bg-slate-700 transition-all"
+          >
+            <Database size={20} /> الدليل العلمي للمختبر
+          </button>
+        </div>
+      </GlassPanel>
+    </div>
+  );
+
+  const renderTutorial = () => (
+    <div className="max-w-4xl mx-auto py-8 animate-fade-in" dir="rtl">
+      <GlassPanel className="p-8">
+        <div className="flex justify-between items-center mb-8 border-b border-slate-200 dark:border-slate-700 pb-4">
+          <h2 className="text-3xl font-bold text-cyan-600 dark:text-cyan-400 flex items-center gap-3">
+            <Database /> الدليل العلمي للمختبر
+          </h2>
+          <button onClick={() => setView('menu')} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500">
+            <XCircle size={32} />
+          </button>
+        </div>
+        
+        <div className="space-y-8 text-lg text-slate-700 dark:text-slate-300">
+          <section className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <h3 className="font-bold text-2xl mb-4 text-red-600 dark:text-red-400">1. مبدأ فحص الفصائل (Blood Typing)</h3>
+            <p className="mb-4">يعتمد الفحص على وجود المستضدات (Antigens) على سطح خلايا الدم الحمراء. نستخدم كواشف تحتوي على أجسام مضادة (Antibodies).</p>
+            <ul className="list-disc list-inside space-y-2 mr-4 text-slate-600 dark:text-slate-400">
+              <li>إذا حدث <strong>تخثر (Agglutination)</strong> عند إضافة <span className="text-cyan-600 dark:text-cyan-400">Anti-A</span>، فهذا يعني وجود المستضد A.</li>
+              <li>إذا حدث تخثر مع <span className="text-yellow-600 dark:text-yellow-400">Anti-B</span>، فهذا يعني وجود المستضد B.</li>
+              <li>إذا لم يحدث تخثر فيهما، الفصيلة هي O.</li>
+              <li>التخثر مع <span className="text-slate-600 dark:text-slate-300">Anti-D</span> يعني أن العامل الريسوسي موجب (+).</li>
+            </ul>
+          </section>
+
+          <section className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <h3 className="font-bold text-2xl mb-4 text-red-600 dark:text-red-400">2. قواعد نقل الدم (Blood Transfusion)</h3>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-2">المعطي العام (Universal Donor)</h4>
+                <p>فصيلة <strong>O-</strong> تسمى بالمعطي العام لعدم احتوائها على أي مستضدات (A, B, Rh).</p>
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-2">المستقبل العام (Universal Recipient)</h4>
+                <p>فصيلة <strong>AB+</strong> تسمى بالمستقبل العام لعدم احتوائها على أي أجسام مضادة في البلازما.</p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </GlassPanel>
+    </div>
+  );
+
+  const renderLevel1 = () => (
+    <div className="grid lg:grid-cols-3 gap-8">
+      {/* Microscope Slide Area */}
+      <GlassPanel className="lg:col-span-2 p-8 relative">
+        {feedback.show && (
+          <div className="absolute inset-0 z-50 bg-white/80 dark:bg-slate-900/90 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center p-6 text-center animate-zoom-in">
+            {feedback.correct ? <CheckCircle size={100} className="text-emerald-500 mb-6 drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" /> 
+                              : <ShieldAlert size={100} className="text-red-500 mb-6 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]" />}
+            <h3 className={`text-4xl font-black mb-6 ${feedback.correct ? 'text-emerald-600' : 'text-red-600'}`}>{feedback.msg}</h3>
+            <button onClick={handleNext} className="flex items-center gap-2 px-10 py-4 bg-slate-800 text-white rounded-xl font-bold text-xl hover:bg-slate-700 transition-all">
+              {score + 1 === GAME_MODES[1].target && feedback.correct ? 'التالي: نقل الدم' : 'عينة جديدة'} <ArrowRight size={24} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center mb-8">
+          <h3 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            <Microscope className="text-cyan-500" /> لوح الفحص (Glass Slide)
+          </h3>
+          <span className="px-4 py-2 bg-slate-200 dark:bg-slate-800 rounded-lg text-sm font-mono font-bold text-slate-600 dark:text-slate-300">
+            Sample #{Math.floor(Math.random()*90000)+10000}
+          </span>
+        </div>
+
+        {/* Drops */}
+        <div className="flex flex-col sm:flex-row justify-around items-center bg-slate-100/50 dark:bg-slate-800/30 p-8 rounded-2xl min-h-[350px] border border-slate-300 dark:border-slate-600 relative overflow-hidden">
+          {/* Glass glare effect */}
+          <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none"></div>
+          
+          <BloodDrop label="Anti-A" state={drops.A} active={activeReagent === 'A'} onApply={() => applyReagent('A')} reagentColor="#06b6d4" disabled={feedback.show} />
+          <BloodDrop label="Anti-B" state={drops.B} active={activeReagent === 'B'} onApply={() => applyReagent('B')} reagentColor="#eab308" disabled={feedback.show} />
+          <BloodDrop label="Anti-D (Rh)" state={drops.D} active={activeReagent === 'D'} onApply={() => applyReagent('D')} reagentColor="#94a3b8" disabled={feedback.show} />
+        </div>
+
+        {/* Droppers / Reagents */}
+        <div className="mt-8 border-t border-slate-200 dark:border-slate-700 pt-8">
+          <h4 className="text-center font-bold text-slate-500 mb-6">Reagents (الكواشف) - اختر كاشفاً ثم انقر على القطرة</h4>
+          <div className="flex justify-center gap-4 sm:gap-8">
+            {[ 
+              { id: 'A', name: 'Anti-A', color: 'bg-cyan-500', border: 'border-cyan-600', shadow: 'shadow-cyan-500/50' },
+              { id: 'B', name: 'Anti-B', color: 'bg-yellow-400', border: 'border-yellow-500', shadow: 'shadow-yellow-500/50' },
+              { id: 'D', name: 'Anti-D', color: 'bg-slate-400', border: 'border-slate-500', shadow: 'shadow-slate-500/50' }
+            ].map(r => (
+              <button 
+                key={r.id}
+                onClick={() => setActiveReagent(r.id)}
+                disabled={drops[r.id] !== 'untested' || feedback.show}
+                className={`flex flex-col items-center p-4 rounded-2xl transition-all duration-300 border-2
+                  ${drops[r.id] !== 'untested' || feedback.show ? 'opacity-40 cursor-not-allowed border-transparent' : 'hover:bg-white/50 dark:hover:bg-slate-800'}
+                  ${activeReagent === r.id ? `border-slate-400 dark:border-slate-300 scale-110 shadow-lg bg-white/20 dark:bg-slate-700/50` : 'border-transparent'}
+                `}
+              >
+                <div className={`w-10 h-16 rounded-b-xl rounded-t-md relative overflow-hidden mb-3 border-2 ${r.border}`}>
+                  <div className={`absolute bottom-0 w-full h-2/3 ${r.color} shadow-[0_0_10px_currentColor]`}></div>
+                  <div className="absolute top-0 w-full h-1/3 bg-white/30 backdrop-blur-sm"></div>
+                  <div className="absolute top-[-5px] left-1/2 -translate-x-1/2 w-4 h-6 bg-slate-800 dark:bg-slate-300 rounded-t-sm"></div>
+                </div>
+                <span className="font-bold text-slate-700 dark:text-slate-200">{r.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </GlassPanel>
+
+      {/* Diagnosis Panel */}
+      <GlassPanel className="p-6 flex flex-col h-full">
+        <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-4">
+          <Activity className="text-red-500" /> لوحة التشخيص (Diagnosis)
+        </h3>
+        
+        <div className="flex-1 space-y-8">
+          <div>
+            <label className="block font-bold text-sm text-slate-500 uppercase tracking-wider mb-3">ABO Group</label>
+            <div className="grid grid-cols-2 gap-3">
+              {['A', 'B', 'AB', 'O'].map(type => (
+                <button
+                  key={type} disabled={feedback.show} onClick={() => setUserGuess(p => ({ ...p, abo: type }))}
+                  className={`p-4 rounded-xl font-black text-lg transition-all ${
+                    userGuess.abo === type ? 'bg-red-600 text-white shadow-lg shadow-red-600/40 scale-105' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-sm text-slate-500 uppercase tracking-wider mb-3">Rh Factor</label>
+            <div className="grid grid-cols-2 gap-3">
+              {[ { id: '+', label: 'Positive (+)' }, { id: '-', label: 'Negative (-)' } ].map(rh => (
+                <button
+                  key={rh.id} disabled={feedback.show} onClick={() => setUserGuess(p => ({ ...p, rh: rh.id }))}
+                  className={`p-4 rounded-xl font-bold transition-all ${
+                    userGuess.rh === rh.id ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-600/40 scale-105' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {rh.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <button 
+          onClick={submitTypingGuess} disabled={feedback.show}
+          className={`w-full mt-8 py-5 rounded-xl font-black text-lg text-white shadow-xl transition-all
+            ${feedback.show ? 'bg-slate-400' : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:scale-[1.02] hover:shadow-emerald-500/50'}
+          `}
+        >
+          تأكيد النتيجة (Submit)
+        </button>
+      </GlassPanel>
+    </div>
+  );
+
+  const renderLevel2 = () => (
+    <div className="max-w-5xl mx-auto">
+      <GlassPanel className="p-8 relative">
+        
+        {feedback.show && (
+          <div className="absolute inset-0 z-50 bg-white/80 dark:bg-slate-900/90 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center p-6 text-center animate-zoom-in">
+            {feedback.correct ? <HeartPulse size={100} className="text-emerald-500 mb-6 drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" /> 
+                              : <ShieldAlert size={100} className="text-red-500 mb-6 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]" />}
+            <h3 className={`text-4xl font-black mb-6 ${feedback.correct ? 'text-emerald-600' : 'text-red-600'}`}>{feedback.msg}</h3>
+            <p className="text-xl text-slate-600 dark:text-slate-300 mb-8">
+              الفصائل المتوافقة مع المريض هي: <strong dir="ltr">{COMPATIBILITY[patientType].join(', ')}</strong>
+            </p>
+            <button onClick={handleNext} className="flex items-center gap-2 px-10 py-4 bg-slate-800 text-white rounded-xl font-bold text-xl hover:bg-slate-700 transition-all">
+              التالي <ArrowRight size={24} />
+            </button>
+          </div>
+        )}
+
+        <div className="text-center mb-10">
+          <h2 className="text-2xl font-bold text-slate-500 mb-2">حالة نقل الدم (Blood Transfusion)</h2>
+          <div className="inline-block bg-red-100 dark:bg-red-900/30 border-2 border-red-500 text-red-700 dark:text-red-400 px-8 py-4 rounded-2xl shadow-lg">
+            <span className="block text-sm uppercase tracking-widest font-bold mb-1">Patient Blood Type</span>
+            <span className="text-5xl font-black" dir="ltr">{patientType}</span>
+          </div>
+          <p className="mt-6 text-lg font-semibold text-slate-700 dark:text-slate-300">
+            حدد <span className="text-red-600 dark:text-red-400 underline decoration-wavy">جميع</span> أكياس الدم المتوافقة التي يمكن نقلها لهذا المريض بأمان.
+          </p>
+        </div>
+
+        <div className="bg-slate-100/50 dark:bg-slate-800/50 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 mb-8">
+          <div className="grid grid-cols-4 sm:flex sm:flex-wrap justify-center gap-4 sm:gap-8">
+            {BLOOD_TYPES.map(type => (
+              <BloodBag 
+                key={type} 
+                type={type} 
+                selected={selectedDonors.includes(type)} 
+                onClick={() => toggleDonor(type)}
+                disabled={feedback.show}
+              />
+            ))}
+          </div>
+        </div>
+
+        <button 
+          onClick={submitTransfusionGuess} disabled={feedback.show}
+          className={`w-full max-w-md mx-auto block py-5 rounded-xl font-black text-lg text-white shadow-xl transition-all
+            ${feedback.show ? 'bg-slate-400' : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:scale-[1.02] hover:shadow-emerald-500/50'}
+          `}
+        >
+          تأكيد نقل الدم (Initiate Transfusion)
+        </button>
+      </GlassPanel>
+    </div>
+  );
+
+  const renderLevel3 = () => {
+    if (!currentDisease) return null;
+
+    return (
+      <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8">
+        
+        {/* Patient File Panel */}
+        <GlassPanel className="p-8 flex flex-col relative overflow-hidden">
+           {/* Top secret / Medical Header */}
+           <div className="absolute top-0 right-0 bg-red-600 text-white px-8 py-1 rounded-bl-2xl font-mono text-sm tracking-widest font-bold z-10 shadow-md">
+             CLINICAL CASE #{Math.floor(Math.random()*90000)+10000}
+           </div>
+
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-3 border-b border-slate-200 dark:border-slate-700 pb-4 mt-4">
+            <ClipboardList className="text-purple-500" size={32} /> ملف المريض (Patient File)
+          </h2>
+
+          <div className="space-y-6 flex-1">
+            {/* CBC Results */}
+            <div className="bg-white/50 dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-inner">
+              <h3 className="font-bold text-slate-600 dark:text-slate-400 mb-4 flex items-center gap-2">
+                <Activity size={20} className="text-cyan-500"/> Complete Blood Count (CBC)
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {[
+                  { label: 'WBC', value: currentDisease.cbc.wbc, unit: '/µL' },
+                  { label: 'RBC', value: currentDisease.cbc.rbc, unit: 'M/µL' },
+                  { label: 'HGB', value: currentDisease.cbc.hgb, unit: 'g/dL' },
+                  { label: 'PLT', value: currentDisease.cbc.plt, unit: '/µL' },
+                  { label: 'MCV', value: currentDisease.cbc.mcv, unit: 'fL' }
+                ].map((item, i) => (
+                  <div key={i} className="bg-slate-100 dark:bg-slate-900/60 p-3 rounded-xl border-l-4 border-cyan-500">
+                    <span className="block text-xs font-bold text-slate-500 uppercase">{item.label}</span>
+                    <span className="font-mono text-sm sm:text-base text-slate-800 dark:text-slate-200 font-semibold" dir="ltr">{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Blood Smear */}
+            <div className="bg-white/50 dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-inner">
+              <h3 className="font-bold text-slate-600 dark:text-slate-400 mb-2 flex items-center gap-2">
+                <Microscope size={20} className="text-emerald-500"/> Blood Smear Observation
+              </h3>
+              <p className="font-mono text-slate-800 dark:text-slate-200 text-lg leading-relaxed bg-slate-100 dark:bg-slate-900/60 p-4 rounded-xl" dir="ltr">
+                {currentDisease.smear}
+              </p>
+            </div>
+
+            {/* Extra Tests */}
+            <div className="bg-white/50 dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-inner">
+              <h3 className="font-bold text-slate-600 dark:text-slate-400 mb-2 flex items-center gap-2">
+                <FileText size={20} className="text-yellow-500"/> Additional Tests
+              </h3>
+              <p className="font-mono text-slate-800 dark:text-slate-200 text-lg leading-relaxed bg-slate-100 dark:bg-slate-900/60 p-4 rounded-xl" dir="ltr">
+                {currentDisease.extraTest}
+              </p>
+            </div>
+          </div>
+        </GlassPanel>
+
+        {/* Diagnosis Selection Panel */}
+        <GlassPanel className="p-8 flex flex-col relative h-full">
+          
+          {/* Explanation Overlay */}
+          {showExplanation && (
+            <div className="absolute inset-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl flex flex-col items-center justify-center p-8 text-center animate-zoom-in border border-slate-200 dark:border-slate-700">
+              {feedback.correct ? <CheckCircle size={80} className="text-emerald-500 mb-4 drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" /> 
+                                : <AlertCircle size={80} className="text-red-500 mb-4 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]" />}
+              <h3 className={`text-3xl font-black mb-2 ${feedback.correct ? 'text-emerald-600' : 'text-red-600'}`}>{feedback.msg}</h3>
+              <div className="text-xl font-bold text-slate-800 dark:text-white mb-6 p-3 bg-slate-100 dark:bg-slate-800 rounded-xl w-full">
+                التشخيص الصحيح: {currentDisease.nameAr} <br/>
+                <span className="text-base text-slate-500" dir="ltr">({currentDisease.nameEn})</span>
+              </div>
+              <p className="text-lg text-slate-700 dark:text-slate-300 mb-8 leading-relaxed text-justify bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                {currentDisease.explanation}
+              </p>
+              <button onClick={handleNext} className="flex items-center gap-2 px-10 py-4 bg-purple-600 text-white rounded-xl font-bold text-xl hover:bg-purple-700 transition-all shadow-lg shadow-purple-600/30">
+                الحالة التالية <ArrowRight size={24} />
+              </button>
+            </div>
+          )}
+
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-3 border-b border-slate-200 dark:border-slate-700 pb-4 mt-4">
+            <Stethoscope className="text-red-500" size={32} /> التشخيص (Diagnosis)
+          </h2>
+          <p className="text-slate-600 dark:text-slate-300 mb-8 text-lg">
+            بناءً على نتائج المريض، ما هو التشخيص الأدق لهذه الحالة؟
+          </p>
+          
+          <div className="grid gap-4 flex-1">
+            {diagnosisOptions.map(option => (
+              <button
+                key={option.id}
+                onClick={() => submitDiagnosisGuess(option.id)}
+                disabled={showExplanation}
+                className="group relative p-5 bg-slate-100 dark:bg-slate-800 border-2 border-transparent hover:border-purple-500 rounded-2xl transition-all hover:scale-[1.02] shadow-sm hover:shadow-purple-500/20 text-right overflow-hidden flex flex-col"
+              >
+                <div className="absolute inset-0 bg-gradient-to-l from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <span className="font-bold text-xl text-slate-800 dark:text-slate-200 z-10 relative">{option.nameAr}</span>
+                <span className="font-mono text-sm text-slate-500 dark:text-slate-400 z-10 relative mt-1" dir="ltr">{option.nameEn}</span>
+              </button>
+            ))}
+          </div>
+        </GlassPanel>
+      </div>
+    );
+  };
+
+  return (
+    <div className={`min-h-screen font-sans bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 transition-colors duration-500 overflow-hidden relative`} dir="rtl">
+      
+      {/* High-tech background accents */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-blue-500/5 rounded-full blur-[100px]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-red-500/10 dark:bg-red-500/5 rounded-full blur-[100px]"></div>
+        {/* Grid Pattern */}
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PHBhdGggZD0iTTAgMGg0MHY0MEgweiIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0wIDM5LjVoNDBWNDBoLTR6TTM5LjUgMGguNXY0MGgtLjV6IiBmaWxsPSJyZ2JhKDE1MCwxNTAsMTUwLDAuMSkiLz48L3N2Zz4=')] opacity-50 dark:opacity-20 mask-image:linear-gradient(to_bottom,white,transparent)"></div>
+      </div>
+
+      {/* Navbar */}
+      <nav className="p-4 px-6 flex justify-between items-center bg-white/30 dark:bg-slate-900/30 backdrop-blur-xl border-b border-white/20 dark:border-slate-700/50 sticky top-0 z-40 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="bg-red-600 p-2 rounded-lg shadow-lg shadow-red-600/30">
+            <Droplet className="text-white" size={24} />
+          </div>
+          <span className="font-black text-xl tracking-tight hidden sm:block bg-gradient-to-l from-slate-800 to-slate-500 dark:from-white dark:to-slate-400 bg-clip-text text-transparent">
+            HEMO-LAB V2.0
+          </span>
+        </div>
+        
+        {view === 'game' && (
+          <div className="flex-1 flex justify-center">
+            <div className="bg-slate-200/50 dark:bg-slate-800/50 backdrop-blur-md px-6 py-2 rounded-full border border-slate-300 dark:border-slate-700 flex items-center gap-4">
+              <span className="font-bold text-slate-700 dark:text-slate-200">{GAME_MODES[level].title}</span>
+              <div className="w-px h-6 bg-slate-300 dark:bg-slate-600"></div>
+              <span className="font-mono font-bold text-cyan-600 dark:text-cyan-400">Score: {score}/{GAME_MODES[level].target}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-4">
+           {view === 'game' && (
+             <button onClick={() => setView('menu')} className="text-sm font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors">
+               إنهاء (Exit)
+             </button>
+           )}
+          <button 
+            onClick={toggleTheme}
+            className="p-2 rounded-xl bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 transition-all text-slate-600 dark:text-slate-300 shadow-sm"
+          >
+            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <main className="p-4 sm:p-8 relative z-10">
+        {view === 'menu' && renderMenu()}
+        {view === 'tutorial' && renderTutorial()}
+        {view === 'game' && level === 1 && renderLevel1()}
+        {view === 'game' && level === 2 && renderLevel2()}
+        {view === 'game' && level === 3 && renderLevel3()}
+      </main>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes fade-in { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes zoom-in { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        @keyframes clump { 0% { transform: scale(0.8) translate(0,0); opacity: 0; } 50% { opacity: 1; } 100% { transform: scale(1) translate(calc(-2px + 4px * var(--tx, 0)), calc(-2px + 4px * var(--ty, 0))); opacity: 0.9; } }
+        @keyframes blob { 0% { transform: translate(0px, 0px) scale(1); } 33% { transform: translate(30px, -50px) scale(1.1); } 66% { transform: translate(-20px, 20px) scale(0.9); } 100% { transform: translate(0px, 0px) scale(1); } }
+        .animate-fade-in { animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-zoom-in { animation: zoom-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .animate-clump { animation: clump 1.5s ease-out forwards; }
+        .animate-blob { animation: blob 7s infinite alternate; }
+        .animation-delay-2000 { animation-delay: 2s; }
+      `}} />
+    </div>
+  );
+}
